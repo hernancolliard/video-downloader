@@ -4,6 +4,58 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitButton = document.getElementById('submit-button');
     const statusMessage = document.getElementById('status-message');
     const downloadLinkContainer = document.getElementById('download-link-container');
+    const progressBarContainer = document.createElement('div');
+    progressBarContainer.style.width = '100%';
+    progressBarContainer.style.backgroundColor = '#ddd';
+    const progressBar = document.createElement('div');
+    progressBar.style.width = '0%';
+    progressBar.style.height = '20px';
+    progressBar.style.backgroundColor = '#4CAF50';
+    progressBar.style.textAlign = 'center';
+    progressBar.style.lineHeight = '20px';
+    progressBar.style.color = 'white';
+    progressBarContainer.appendChild(progressBar);
+    
+    const ws = new WebSocket(`ws://${window.location.host}`);
+
+    ws.onopen = () => {
+        console.log('Connected to WebSocket server');
+    };
+
+    ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        switch (message.type) {
+            case 'progress':
+                progressBar.style.width = `${message.progress}%`;
+                progressBar.textContent = `${message.progress}%`;
+                statusMessage.textContent = 'Descargando...';
+                break;
+            case 'completed':
+                submitButton.disabled = false;
+                statusMessage.textContent = '¡Video listo para descargar!';
+                const downloadLink = document.createElement('a');
+                downloadLink.href = message.downloadUrl;
+                downloadLink.textContent = 'Descargar Archivo';
+                downloadLink.setAttribute('download', '');
+                downloadLinkContainer.innerHTML = '';
+                downloadLinkContainer.appendChild(downloadLink);
+                progressBar.style.width = '0%';
+                progressBar.textContent = '';
+                progressBarContainer.remove();
+                break;
+            case 'error':
+                showError(message.message);
+                submitButton.disabled = false;
+                progressBar.style.width = '0%';
+                progressBar.textContent = '';
+                progressBarContainer.remove();
+                break;
+        }
+    };
+
+    ws.onclose = () => {
+        console.log('Disconnected from WebSocket server');
+    };
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -16,44 +68,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Deshabilitar botón y mostrar estado
         submitButton.disabled = true;
-        statusMessage.textContent = 'Iniciando descarga... Esto puede tardar varios minutos.';
+        statusMessage.textContent = 'Iniciando descarga...';
         statusMessage.className = '';
         downloadLinkContainer.innerHTML = '';
+        
+        form.parentNode.insertBefore(progressBarContainer, form.nextSibling);
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
 
-        try {
-            const response = await fetch('/download', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ url }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Error desconocido en el servidor.' }));
-                throw new Error(errorData.error || `Error del servidor: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-
-            if (data.success) {
-                statusMessage.textContent = '¡Video listo para descargar!';
-                const downloadLink = document.createElement('a');
-                downloadLink.href = data.downloadUrl;
-                downloadLink.textContent = 'Descargar Archivo';
-                downloadLink.setAttribute('download', ''); // Opcional: para forzar la descarga
-                downloadLinkContainer.appendChild(downloadLink);
-            } else {
-                showError(data.error);
-            }
-
-        } catch (error) {
-            console.error('Error en el script del cliente:', error);
-            showError(error.message || 'No se pudo conectar con el servidor.');
-        } finally {
-            // Habilitar el botón de nuevo
-            submitButton.disabled = false;
-        }
+        ws.send(JSON.stringify({ type: 'download', url }));
     });
 
     function showError(message) {

@@ -1,76 +1,105 @@
 const express = require('express');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const ytdlpexec = require('yt-dlp-exec');
+const http = require('http');
+const WebSocket = require('ws');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3000;
 
-// --- Middlewares de Express ---
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// --- Rutas de la API ---
+const downloadsDir = path.join(__dirname, 'downloads');
+if (!fs.existsSync(downloadsDir)) {
+    fs.mkdirSync(downloadsDir);
+}
 
-// Endpoint para la descarga de videos
-app.post('/download', async (req, res) => {
-  const videoUrl = req.body.url;
-  if (!videoUrl) {
-    return res.status(400).json({ success: false, error: 'URL no proporcionada.' });
-  }
+wss.on('connection', (ws) => {
+    ws.on('message', (message) => {
+        const { type, url } = JSON.parse(message);
 
-  const downloadsDir = path.join(__dirname, 'downloads');
-  if (!fs.existsSync(downloadsDir)) {
-    fs.mkdirSync(downloadsDir, { recursive: true });
-  }
-  
-  const outputName = `${Date.now()}.mp4`;
-  const outputPath = path.join(downloadsDir, outputName);
+        if (type === 'download') {
+            if (!url) {
+                ws.send(JSON.stringify({ type: 'error', message: 'No URL provided' }));
+                return;
+            }
 
-  console.log(`Iniciando descarga de: ${videoUrl}`);
+            const ytdlpPath = path.join(__dirname, 'binaries', 'yt-dlp.exe');
+            const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
+            const options = [
+                '--progress',
+                '-o',
+                outputTemplate,
+                url
+            ];
 
-  try {
-    // Usamos el nuevo paquete yt-dlp-exec
-    await ytdlpexec(videoUrl, {
-      output: outputPath,
-      format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            const ytdlp = spawn(ytdlpPath, options);
+
+            let fileName = '';
+
+            ytdlp.stdout.on('data', (data) => {
+                const output = data.toString();
+                
+                if (!fileName) {
+                    const fileNameMatch = output.match(/\[download\] Destination: (.*)/);
+                    if (fileNameMatch) {
+                        fileName = path.basename(fileNameMatch[1]);
+                    }
+                }
+
+                const progressMatch = output.match(/\[download\]\s+(\d+\.\d+)% of/);
+                if (progressMatch) {
+                    const progress = progressMatch[1];
+                    ws.send(JSON.stringify({ type: 'progress', progress }));
+                }
+            });
+
+            ytdlp.stderr.on('data', (data) => {
+                console.error(`stderr: ${data}`);
+                ws.send(JSON.stringify({ type: 'error', message: data.toString() }));
+            });
+
+            ytdlp.on('close', (code) => {
+                if (code === 0) {
+                    const downloadUrl = `/downloads/${fileName}`;
+                    ws.send(JSON.stringify({ type: 'completed', downloadUrl }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'error', message: 'Download failed' }));
+                }
+            });
+
+            ws.on('close', () => {
+                ytdlp.kill();
+            });
+        }
     });
-
-    console.log(`Descarga completada: ${outputPath}`);
-    res.json({ success: true, downloadUrl: `/downloads/${outputName}` });
-
-  } catch (error) {
-    console.error('Error al descargar el video con yt-dlp-exec:', error);
-    const errorMessage = error.stderr.includes('Unsupported URL')
-      ? 'La URL proporcionada no es compatible.'
-      : 'Error al procesar el video.';
-    res.status(500).json({ success: false, error: errorMessage, details: error.stderr });
-  }
 });
 
-// Endpoint para servir el archivo de video descargado
 app.get('/downloads/:fileName', (req, res) => {
-  const fileName = req.params.fileName;
-  const filePath = path.join(__dirname, 'downloads', fileName);
-
-  if (fs.existsSync(filePath)) {
-    res.download(filePath, (err) => {
-      if (err) {
-        console.error('Error al enviar el archivo:', err);
-      }
-      // Elimina el archivo después de que se complete la descarga
-      fs.unlink(filePath, (unlinkErr) => {
-        if (unlinkErr) console.error('Error al eliminar el archivo temporal:', unlinkErr);
-        else console.log(`Archivo temporal eliminado: ${fileName}`);
+    const fileName = req.params.fileName;
+    const filePath = path.join(__dirname, 'downloads', fileName);
+  
+    if (fs.existsSync(filePath)) {
+      res.download(filePath, (err) => {
+        if (err) {
+          console.error('Error al enviar el archivo:', err);
+        }
+        // Elimina el archivo después de que se complete la descarga
+        fs.unlink(filePath, (unlinkErr) => {
+          if (unlinkErr) console.error('Error al eliminar el archivo temporal:', unlinkErr);
+          else console.log(`Archivo temporal eliminado: ${fileName}`);
+        });
       });
-    });
-  } else {
-    res.status(404).send('Archivo no encontrado.');
-  }
-});
+    } else {
+      res.status(404).send('Archivo no encontrado.');
+    }
+  });
 
-// --- Inicio del Servidor ---
-app.listen(port, () => {
-  console.log(`Servidor iniciado en http://localhost:${port}`);
+server.listen(port, () => {
+    console.log(`Server listening at http://localhost:${port}`);
 });
