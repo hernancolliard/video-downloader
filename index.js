@@ -119,6 +119,19 @@ app.get('/downloads/:fileName', (req, res) => {
     }
   });
 
-server.listen(port, () => {
-    console.log(`Server listening at http://localhost:${port}`);
-});
+async function initialize() {
+    try {
+        console.log('Downloading yt-dlp binary...');
+        await YTDlpWrap.downloadFromGithub();
+        console.log('yt-dlp binary downloaded successfully.');
+
+        server.listen(port, () => {
+            console.log(`Server listening at http://localhost:${port}`);
+        });
+    } catch (error) {
+        console.error('Error downloading yt-dlp binary:', error);
+        process.exit(1);
+    }
+}
+
+initialize();
