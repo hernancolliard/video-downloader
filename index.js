@@ -7,6 +7,8 @@ const WebSocket = require('ws');
 const os = require('os');
 const YTDlpWrap = require('yt-dlp-wrap');
 
+const YTDLP_BINARY_PATH = path.join(os.tmpdir(), os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+
 const app = express();
 const port = 3000;
 
@@ -31,7 +33,7 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            const ytdlpPath = YTDlpWrap.getBinaryPath();
+            const ytdlpPath = YTDLP_BINARY_PATH;
             const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
             const options = [
                 '--progress',
@@ -121,15 +123,19 @@ app.get('/downloads/:fileName', (req, res) => {
 
 async function initialize() {
     try {
-        console.log('Downloading yt-dlp binary...');
-        await YTDlpWrap.downloadFromGithub();
-        console.log('yt-dlp binary downloaded successfully.');
+        if (!fs.existsSync(YTDLP_BINARY_PATH)) {
+            console.log('Downloading yt-dlp binary to:', YTDLP_BINARY_PATH);
+            await YTDlpWrap.downloadFromGithub(YTDLP_BINARY_PATH);
+            console.log('yt-dlp binary downloaded successfully.');
+        } else {
+            console.log('yt-dlp binary already exists at:', YTDLP_BINARY_PATH);
+        }
 
         server.listen(port, () => {
             console.log(`Server listening at http://localhost:${port}`);
         });
     } catch (error) {
-        console.error('Error downloading yt-dlp binary:', error);
+        console.error('Error in server initialization:', error);
         process.exit(1);
     }
 }
