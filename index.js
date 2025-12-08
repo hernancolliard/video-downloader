@@ -79,6 +79,24 @@ wss.on('connection', (ws) => {
             });
         }
     });
+
+    ws.isAlive = true;
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
+});
+
+const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+        if (ws.isAlive === false) return ws.terminate();
+
+        ws.isAlive = false;
+        ws.ping(() => {});
+    });
+}, 30000);
+
+wss.on('close', function close() {
+    clearInterval(interval);
 });
 
 app.get('/downloads/:fileName', (req, res) => {
