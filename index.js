@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const WebSocket = require('ws');
+const os = require('os');
 
 const app = express();
 const port = 3000;
@@ -14,9 +15,9 @@ const wss = new WebSocket.Server({ server });
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-const downloadsDir = path.join(__dirname, 'downloads');
+const downloadsDir = path.join(os.tmpdir(), 'downloads');
 if (!fs.existsSync(downloadsDir)) {
-    fs.mkdirSync(downloadsDir);
+    fs.mkdirSync(downloadsDir, { recursive: true });
 }
 
 wss.on('connection', (ws) => {
@@ -82,7 +83,7 @@ wss.on('connection', (ws) => {
 
 app.get('/downloads/:fileName', (req, res) => {
     const fileName = req.params.fileName;
-    const filePath = path.join(__dirname, 'downloads', fileName);
+    const filePath = path.join(downloadsDir, fileName);
   
     if (fs.existsSync(filePath)) {
       res.download(filePath, (err) => {
