@@ -13,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "express": "^4.18.2",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "yt-dlp-wrap": "^2.3.12"
   }
 }

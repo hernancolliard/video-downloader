@@ -5,6 +5,7 @@ const fs = require('fs');
 const http = require('http');
 const WebSocket = require('ws');
 const os = require('os');
+const YTDlpWrap = require('yt-dlp-wrap');
 
 const app = express();
 const port = 3000;
@@ -30,7 +31,7 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            const ytdlpPath = path.join(__dirname, 'binaries', 'yt-dlp.exe');
+            const ytdlpPath = YTDlpWrap.getBinaryPath();
             const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
             const options = [
                 '--progress',
@@ -62,7 +63,6 @@ wss.on('connection', (ws) => {
 
             ytdlp.stderr.on('data', (data) => {
                 console.error(`stderr: ${data}`);
-                ws.send(JSON.stringify({ type: 'error', message: data.toString() }));
             });
 
             ytdlp.on('close', (code) => {
