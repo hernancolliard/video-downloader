@@ -6,7 +6,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const WebSocket = require('ws');
-const YTDlpWrap = require('yt-dlp-wrap');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 
 const ytdlpWrap = new YTDlpWrap();
 const app = express();
