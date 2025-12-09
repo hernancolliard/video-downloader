@@ -127,6 +127,10 @@ async function initialize() {
             console.log('Downloading yt-dlp binary to:', YTDLP_BINARY_PATH);
             await YTDlpWrap.downloadFromGithub(YTDLP_BINARY_PATH);
             console.log('yt-dlp binary downloaded successfully.');
+            if (os.platform() !== 'win32') {
+                fs.chmodSync(YTDLP_BINARY_PATH, '755');
+                console.log('Set execute permissions for yt-dlp binary.');
+            }
         } else {
             console.log('yt-dlp binary already exists at:', YTDLP_BINARY_PATH);
         }
