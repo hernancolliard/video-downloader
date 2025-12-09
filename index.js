@@ -1,154 +1,183 @@
 // Main application file
 const express = require('express');
-const { spawn } = require('child_process');
+// Usamos 'node:child_process' para evitar conflictos de nombres
+const childProcess = require('node:child_process'); 
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const WebSocket = require('ws');
-const YoutubeDlWrap = require('youtube-dl-wrap');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 
-const youtubeDlWrap = new YoutubeDlWrap();
+// Inicialización de la app
 const app = express();
 const port = process.env.PORT || 3000;
-
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Configuración de middleware y estáticos
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// Directorio temporal seguro
 const downloadsDir = path.join(os.tmpdir(), 'downloads');
 if (!fs.existsSync(downloadsDir)) {
     fs.mkdirSync(downloadsDir, { recursive: true });
 }
 
 wss.on('connection', (ws) => {
-    ws.on('message', (message) => {
-        const { type, url } = JSON.parse(message);
+    ws.on('message', (messageBuffer) => {
+        try {
+            // Convertir buffer a string explícitamente para evitar errores
+            const messageString = messageBuffer.toString();
+            const parsedMessage = JSON.parse(messageString);
+            const { type, url } = parsedMessage;
 
-        if (type === 'download') {
-            if (!url) {
-                ws.send(JSON.stringify({ type: 'error', message: 'No URL provided' }));
-                return;
-            }
-            
-            const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
-            
-            // Use the new library's exec method
-            const ytdlpEmitter = youtubeDlWrap.exec([
-                url,
-                '--progress',
-                '-o',
-                outputTemplate
-            ]);
+            if (type === 'download') {
+                if (!url) {
+                    ws.send(JSON.stringify({ type: 'error', message: 'No URL provided' }));
+                    return;
+                }
 
-            // Get the raw child process to attach listeners
-            const ytdlp = ytdlpEmitter.childProcess;
+                // Ruta al ejecutable
+                const binaryName = os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+                const ytdlpPath = path.join(os.tmpdir(), binaryName);
 
-            let fileName = '';
+                // Verificar que el binario exista antes de ejecutar
+                if (!fs.existsSync(ytdlpPath)) {
+                    ws.send(JSON.stringify({ type: 'error', message: 'Server error: yt-dlp binary not found' }));
+                    return;
+                }
 
-            ytdlp.stdout.on('data', (data) => {
-                const output = data.toString();
+                const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
+                const options = [
+                    '--progress',
+                    '--newline', // Importante para parsear el output línea por línea
+                    '-o', outputTemplate,
+                    url
+                ];
+
+                console.log(`Iniciando descarga con: ${ytdlpPath}`);
                 
-                if (!fileName) {
-                    const fileNameMatch = output.match(/\[download\] Destination: (.*)/);
-                    if (fileNameMatch) {
-                        fileName = path.basename(fileNameMatch[1]);
+                // Ejecución segura usando childProcess directamente
+                const ytdlpProcess = childProcess.spawn(ytdlpPath, options);
+
+                // Verificación de seguridad inmediata
+                if (!ytdlpProcess || !ytdlpProcess.stdout) {
+                    console.error('Error crítico: No se pudo iniciar el proceso de descarga');
+                    ws.send(JSON.stringify({ type: 'error', message: 'Error interno al iniciar descarga' }));
+                    return;
+                }
+
+                let fileName = '';
+
+                ytdlpProcess.stdout.on('data', (data) => {
+                    const output = data.toString();
+                    
+                    // Intentar capturar el nombre del archivo
+                    if (!fileName) {
+                        const fileNameMatch = output.match(/\[download\] Destination: (.*)/);
+                        if (fileNameMatch) {
+                            fileName = path.basename(fileNameMatch[1]);
+                        } else {
+                            // Intento secundario si el archivo ya existe
+                            const fileExistsMatch = output.match(/\[download\] (.*) has already been downloaded/);
+                            if (fileExistsMatch) {
+                                fileName = path.basename(fileExistsMatch[1]);
+                            }
+                        }
                     }
-                }
 
-                const progressMatch = output.match(/\[download\]\s+(\d+\.\d+)% of/);
-                if (progressMatch) {
-                    const progress = progressMatch[1];
-                    ws.send(JSON.stringify({ type: 'progress', progress }));
-                }
-            });
+                    // Capturar progreso
+                    const progressMatch = output.match(/\[download\]\s+(\d+\.\d+)% of/);
+                    if (progressMatch) {
+                        const progress = progressMatch[1];
+                        ws.send(JSON.stringify({ type: 'progress', progress }));
+                    }
+                });
 
-            ytdlp.stderr.on('data', (data) => {
-                // Only log stderr, don't send as a client-side error
-                console.error(`stderr: ${data}`);
-            });
+                ytdlpProcess.stderr.on('data', (data) => {
+                    console.error(`stderr: ${data}`);
+                });
 
-            ytdlp.on('close', (code) => {
-                if (code === 0) {
-                    const downloadUrl = `/downloads/${fileName}`;
-                    ws.send(JSON.stringify({ type: 'completed', downloadUrl }));
-                } else {
-                    ws.send(JSON.stringify({ type: 'error', message: 'Download failed' }));
-                }
-            });
+                ytdlpProcess.on('close', (code) => {
+                    console.log(`Proceso terminado con código: ${code}`);
+                    if (code === 0 && fileName) {
+                        const downloadUrl = `/downloads/${encodeURIComponent(fileName)}`;
+                        ws.send(JSON.stringify({ type: 'completed', downloadUrl }));
+                    } else {
+                        ws.send(JSON.stringify({ type: 'error', message: 'La descarga falló o no se encontró el nombre del archivo.' }));
+                    }
+                });
 
-            ws.on('close', () => {
-                ytdlp.kill();
-            });
+                // Matar proceso si el cliente se desconecta
+                ws.on('close', () => {
+                    if (ytdlpProcess && !ytdlpProcess.killed) {
+                        ytdlpProcess.kill();
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Error procesando mensaje:', e);
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid request' }));
         }
     });
 
     ws.isAlive = true;
-    ws.on('pong', () => {
-        ws.isAlive = true;
-    });
+    ws.on('pong', () => { ws.isAlive = true; });
 });
 
-const interval = setInterval(function ping() {
-    wss.clients.forEach(function each(ws) {
+// Ping keep-alive
+const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
         if (ws.isAlive === false) return ws.terminate();
-
         ws.isAlive = false;
         ws.ping(() => {});
     });
 }, 30000);
 
-wss.on('close', function close() {
-    clearInterval(interval);
-});
+wss.on('close', () => clearInterval(interval));
 
+// Ruta de descarga
 app.get('/downloads/:fileName', (req, res) => {
     const fileName = req.params.fileName;
-    const filePath = path.join(downloadsDir, fileName);
+    const safeFileName = path.basename(fileName);
+    const filePath = path.join(downloadsDir, safeFileName);
   
     if (fs.existsSync(filePath)) {
       res.download(filePath, (err) => {
-        if (err) {
-          console.error('Error sending file:', err);
-        }
+        if (err) console.error('Error al enviar archivo:', err);
+        // Limpieza
         fs.unlink(filePath, (unlinkErr) => {
-          if (unlinkErr) console.error('Error deleting temp file:', unlinkErr);
-          else console.log(`Temp file deleted: ${fileName}`);
+          if (unlinkErr) console.error('Error al borrar temporal:', unlinkErr);
         });
       });
     } else {
-      res.status(404).send('File not found.');
+      res.status(404).send('Archivo no encontrado.');
     }
-  });
+});
 
+// Inicialización del servidor y descarga del binario
 async function initialize() {
     try {
-        const platform = os.platform();
-        const binaryName = platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+        const binaryName = os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
         const binaryPath = path.join(os.tmpdir(), binaryName);
-
-        if (!fs.existsSync(binaryPath)) {
-            console.log(`Downloading yt-dlp binary to: ${binaryPath}`);
-            const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${binaryName}`;
-            await YoutubeDlWrap.downloadFile(downloadUrl, binaryPath);
-            console.log('yt-dlp binary downloaded successfully.');
-            if (platform !== 'win32') {
-                fs.chmodSync(binaryPath, '755');
-                console.log('Set execute permissions for yt-dlp binary.');
-            }
-        } else {
-            console.log(`yt-dlp binary already exists at: ${binaryPath}`);
-        }
         
-        youtubeDlWrap.setBinaryPath(binaryPath);
+        if (!fs.existsSync(binaryPath)) {
+            console.log('Descargando binario yt-dlp a:', binaryPath);
+            await YTDlpWrap.downloadFromGithub(binaryPath);
+            // Permisos de ejecución para Linux/Render
+            fs.chmodSync(binaryPath, '755');
+            console.log('Binario descargado y permisos asignados.');
+        } else {
+            console.log('Binario yt-dlp ya existe en:', binaryPath);
+        }
 
         server.listen(port, () => {
-            console.log(`Server listening at http://localhost:${port}`);
+            console.log(`Servidor escuchando en http://localhost:${port}`);
         });
     } catch (error) {
-        console.error('Error in server initialization:', error);
+        console.error('Error fatal iniciando el servidor:', error);
         process.exit(1);
     }
 }

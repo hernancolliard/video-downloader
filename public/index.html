@@ -1,22 +1,29 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Video Downloader</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
     <div class="container">
-        <h1>Video Downloader</h1>
-        <p>Pega la URL de la página que contiene el video que quieres descargar.</p>
-        <form id="download-form">
-            <input type="text" id="url-input" placeholder="https://ejemplo.com/video..." required>
-            <button type="submit" id="submit-button">Descargar</button>
-        </form>
-        <div id="status-message"></div>
-        <div id="download-link-container"></div>
+      <h1>Video Downloader</h1>
+      <p>
+        Pega la URL de la página que contiene el video que quieres descargar.
+      </p>
+      <form id="download-form">
+        <input
+          type="text"
+          id="url-input"
+          placeholder="https://ejemplo.com/video..."
+          required
+        />
+        <button type="submit" id="submit-button">Descargar</button>
+      </form>
+      <div id="status-message"></div>
+      <div id="download-link-container"></div>
     </div>
     <script src="script.js"></script>
-</body>
+  </body>
 </html>
