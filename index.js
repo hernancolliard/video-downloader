@@ -31,7 +31,7 @@ wss.on('connection', (ws) => {
             // Convertir buffer a string explícitamente para evitar errores
             const messageString = messageBuffer.toString();
             const parsedMessage = JSON.parse(messageString);
-            const { type, url } = parsedMessage;
+            const { type, url, cookies } = parsedMessage;
 
             if (type === 'download') {
                 if (!url) {
@@ -53,9 +53,17 @@ wss.on('connection', (ws) => {
                 const options = [
                     '--progress',
                     '--newline', // Importante para parsear el output línea por línea
-                    '-o', outputTemplate,
-                    url
+                    '-o', outputTemplate
                 ];
+
+                let cookieFilePath = null;
+                if (cookies && cookies.trim() !== '') {
+                    cookieFilePath = path.join(os.tmpdir(), `cookies-${Date.now()}.txt`);
+                    fs.writeFileSync(cookieFilePath, cookies);
+                    options.push('--cookies', cookieFilePath);
+                }
+
+                options.push(url);
 
                 console.log(`Iniciando descarga con: ${ytdlpPath}`);
                 
@@ -66,6 +74,9 @@ wss.on('connection', (ws) => {
                 if (!ytdlpProcess || !ytdlpProcess.stdout) {
                     console.error('Error crítico: No se pudo iniciar el proceso de descarga');
                     ws.send(JSON.stringify({ type: 'error', message: 'Error interno al iniciar descarga' }));
+                    if (cookieFilePath) {
+                        fs.unlinkSync(cookieFilePath);
+                    }
                     return;
                 }
 
@@ -102,6 +113,9 @@ wss.on('connection', (ws) => {
 
                 ytdlpProcess.on('close', (code) => {
                     console.log(`Proceso terminado con código: ${code}`);
+                    if (cookieFilePath) {
+                        fs.unlinkSync(cookieFilePath);
+                    }
                     if (code === 0 && fileName) {
                         const downloadUrl = `/downloads/${encodeURIComponent(fileName)}`;
                         ws.send(JSON.stringify({ type: 'completed', downloadUrl }));
@@ -114,6 +128,9 @@ wss.on('connection', (ws) => {
                 ws.on('close', () => {
                     if (ytdlpProcess && !ytdlpProcess.killed) {
                         ytdlpProcess.kill();
+                        if (cookieFilePath) {
+                           fs.unlinkSync(cookieFilePath);
+                        }
                     }
                 });
             }

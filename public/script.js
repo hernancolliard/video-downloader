@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('download-form');
     const urlInput = document.getElementById('url-input');
+    const cookieInput = document.getElementById('cookie-input');
     const submitButton = document.getElementById('submit-button');
     const statusMessage = document.getElementById('status-message');
     const downloadLinkContainer = document.getElementById('download-link-container');
@@ -62,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
 
         const url = urlInput.value.trim();
+        const cookies = cookieInput.value.trim();
         if (!url) {
             showError('Por favor, introduce una URL.');
             return;
@@ -77,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         progressBar.style.width = '0%';
         progressBar.textContent = '0%';
 
-        ws.send(JSON.stringify({ type: 'download', url }));
+        ws.send(JSON.stringify({ type: 'download', url, cookies }));
     });
 
     function showError(message) {
