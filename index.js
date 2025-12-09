@@ -1,14 +1,6 @@
-const express = require('express');
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const http = require('http');
-const WebSocket = require('ws');
-const os = require('os');
 const YTDlpWrap = require('yt-dlp-wrap');
 
-const YTDLP_BINARY_PATH = path.join(os.tmpdir(), os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
-
+const ytdlpWrap = new YTDlpWrap();
 const app = express();
 const port = 3000;
 
@@ -33,7 +25,7 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            const ytdlpPath = YTDLP_BINARY_PATH;
+            const ytdlpPath = ytdlpWrap.getBinaryPath();
             const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
             const options = [
                 '--progress',
@@ -123,16 +115,15 @@ app.get('/downloads/:fileName', (req, res) => {
 
 async function initialize() {
     try {
-        if (!fs.existsSync(YTDLP_BINARY_PATH)) {
-            console.log('Downloading yt-dlp binary to:', YTDLP_BINARY_PATH);
-            await YTDlpWrap.downloadFromGithub(YTDLP_BINARY_PATH);
+        const binaryPath = path.join(os.tmpdir(), os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+        ytdlpWrap.setBinaryPath(binaryPath);
+
+        if (!fs.existsSync(binaryPath)) {
+            console.log('Downloading yt-dlp binary to:', binaryPath);
+            await ytdlpWrap.execPromise(['--version']);
             console.log('yt-dlp binary downloaded successfully.');
-            if (os.platform() !== 'win32') {
-                fs.chmodSync(YTDLP_BINARY_PATH, '755');
-                console.log('Set execute permissions for yt-dlp binary.');
-            }
         } else {
-            console.log('yt-dlp binary already exists at:', YTDLP_BINARY_PATH);
+            console.log('yt-dlp binary already exists at:', binaryPath);
         }
 
         server.listen(port, () => {
