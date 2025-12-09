@@ -5,6 +5,7 @@ const childProcess = require('node:child_process');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
 const os = require('os');
 const WebSocket = require('ws');
 const YTDlpWrap = require('yt-dlp-wrap').default;
@@ -182,9 +183,38 @@ async function initialize() {
         
         if (!fs.existsSync(binaryPath)) {
             console.log('Descargando binario yt-dlp a:', binaryPath);
-            await YTDlpWrap.downloadFromGithub(binaryPath);
+            
+            // URL directa a una versión específica para evitar el rate limit de la API de GitHub
+            const version = '2023.12.30';
+            const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/download/${version}/${binaryName}`;
+            
+            // Usamos https para descargar el archivo manualmente
+            await new Promise((resolve, reject) => {
+                https.get(downloadUrl, (res) => {
+                    if (res.statusCode === 302) { // GitHub redirige
+                        https.get(res.headers.location, (res2) => {
+                            const fileStream = fs.createWriteStream(binaryPath);
+                            res2.pipe(fileStream);
+                            fileStream.on('finish', () => {
+                                fileStream.close(resolve);
+                            });
+                        }).on('error', reject);
+                    } else if (res.statusCode === 200) {
+                        const fileStream = fs.createWriteStream(binaryPath);
+                        res.pipe(fileStream);
+                        fileStream.on('finish', () => {
+                            fileStream.close(resolve);
+                        });
+                    } else {
+                        reject(new Error(`Failed to download binary: Status Code ${res.statusCode}`));
+                    }
+                }).on('error', reject);
+            });
+
             // Permisos de ejecución para Linux/Render
-            fs.chmodSync(binaryPath, '755');
+            if(os.platform() !== 'win32') {
+                fs.chmodSync(binaryPath, '755');
+            }
             console.log('Binario descargado y permisos asignados.');
         } else {
             console.log('Binario yt-dlp ya existe en:', binaryPath);
