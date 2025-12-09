@@ -5,11 +5,12 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
+const WebSocket = require('ws');
 const YTDlpWrap = require('yt-dlp-wrap');
 
 const ytdlpWrap = new YTDlpWrap();
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
