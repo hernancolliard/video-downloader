@@ -5,17 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitButton = document.getElementById('submit-button');
     const statusMessage = document.getElementById('status-message');
     const downloadLinkContainer = document.getElementById('download-link-container');
-    const progressBarContainer = document.createElement('div');
-    progressBarContainer.style.width = '100%';
-    progressBarContainer.style.backgroundColor = '#ddd';
-    const progressBar = document.createElement('div');
-    progressBar.style.width = '0%';
-    progressBar.style.height = '20px';
-    progressBar.style.backgroundColor = '#4CAF50';
-    progressBar.style.textAlign = 'center';
-    progressBar.style.lineHeight = '20px';
-    progressBar.style.color = 'white';
-    progressBarContainer.appendChild(progressBar);
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}`);
@@ -27,30 +16,21 @@ document.addEventListener('DOMContentLoaded', () => {
     ws.onmessage = (event) => {
         const message = JSON.parse(event.data);
         switch (message.type) {
-            case 'progress':
-                progressBar.style.width = `${message.progress}%`;
-                progressBar.textContent = `${message.progress}%`;
-                statusMessage.textContent = 'Descargando...';
-                break;
-            case 'completed':
+            case 'info':
                 submitButton.disabled = false;
-                statusMessage.textContent = '¡Video listo para descargar!';
+                statusMessage.textContent = '¡Tu enlace de descarga está listo!';
                 const downloadLink = document.createElement('a');
                 downloadLink.href = message.downloadUrl;
-                downloadLink.textContent = 'Descargar Archivo';
-                downloadLink.setAttribute('download', '');
+                // Sanitizar nombre de archivo
+                const fileName = message.title.replace(/[^a-zA-Z0-9\._-]/g, '_') + '.' + message.ext;
+                downloadLink.textContent = `Descargar ${fileName}`;
+                downloadLink.setAttribute('download', fileName);
                 downloadLinkContainer.innerHTML = '';
                 downloadLinkContainer.appendChild(downloadLink);
-                progressBar.style.width = '0%';
-                progressBar.textContent = '';
-                progressBarContainer.remove();
                 break;
             case 'error':
                 showError(message.message);
                 submitButton.disabled = false;
-                progressBar.style.width = '0%';
-                progressBar.textContent = '';
-                progressBarContainer.remove();
                 break;
         }
     };
@@ -71,13 +51,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Deshabilitar botón y mostrar estado
         submitButton.disabled = true;
-        statusMessage.textContent = 'Iniciando descarga...';
+        statusMessage.textContent = 'Generando enlace de descarga...';
         statusMessage.className = '';
         downloadLinkContainer.innerHTML = '';
-        
-        form.parentNode.insertBefore(progressBarContainer, form.nextSibling);
-        progressBar.style.width = '0%';
-        progressBar.textContent = '0%';
 
         const audioOnlyCheckbox = document.getElementById('audio-only-checkbox');
         const downloadType = audioOnlyCheckbox.checked ? 'audio' : 'video';

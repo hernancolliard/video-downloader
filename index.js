@@ -40,9 +40,8 @@ if (!fs.existsSync(downloadsDir)) {
 }
 
 wss.on('connection', (ws) => {
-    ws.on('message', (messageBuffer) => {
+    ws.on('message', async (messageBuffer) => {
         try {
-            // Convertir buffer a string explícitamente para evitar errores
             const messageString = messageBuffer.toString();
             const parsedMessage = JSON.parse(messageString);
             const { type, url, cookies, downloadType } = parsedMessage;
@@ -53,108 +52,55 @@ wss.on('connection', (ws) => {
                     return;
                 }
 
-                // Ruta al ejecutable
                 const binaryName = os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
                 const ytdlpPath = path.join(os.tmpdir(), binaryName);
 
-                // Verificar que el binario exista antes de ejecutar
                 if (!fs.existsSync(ytdlpPath)) {
                     ws.send(JSON.stringify({ type: 'error', message: 'Server error: yt-dlp binary not found' }));
                     return;
                 }
 
-                const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
-                const options = [
-                    '--progress',
-                    '--newline', // Importante para parsear el output línea por línea
-                    '--force-ipv4',
-                    '--sleep-requests', '2',
-                    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-                    '-o', outputTemplate
-                ];
+                const ytdlp = new YTDlpWrap(ytdlpPath);
                 
-                if (downloadType === 'audio') {
-                    options.push('-x'); // Opción corta para --extract-audio
-                    options.push('--audio-format', 'mp3');
-                }
-
-                let cookieFilePath = null;
-                if (cookies && cookies.trim() !== '') {
-                    cookieFilePath = path.join(os.tmpdir(), `cookies-${Date.now()}.txt`);
-                    fs.writeFileSync(cookieFilePath, cookies);
-                    options.push('--cookies', cookieFilePath);
-                }
-
-                options.push(url);
-
-                console.log(`Iniciando descarga con: ${ytdlpPath}`);
-                
-                // Ejecución segura usando childProcess directamente
-                const ytdlpProcess = childProcess.spawn(ytdlpPath, options);
-
-                // Verificación de seguridad inmediata
-                if (!ytdlpProcess || !ytdlpProcess.stdout) {
-                    console.error('Error crítico: No se pudo iniciar el proceso de descarga');
-                    ws.send(JSON.stringify({ type: 'error', message: 'Error interno al iniciar descarga' }));
-                    if (cookieFilePath) {
-                        fs.unlinkSync(cookieFilePath);
-                    }
-                    return;
-                }
-
-                let fileName = '';
-
-                ytdlpProcess.stdout.on('data', (data) => {
-                    const output = data.toString();
+                try {
+                    const metadata = await ytdlp.getVideoInfo(url);
                     
-                    // Intentar capturar el nombre del archivo
-                    if (!fileName) {
-                        const fileNameMatch = output.match(/\[download\] Destination: (.*)/);
-                        if (fileNameMatch) {
-                            fileName = path.basename(fileNameMatch[1]);
-                        } else {
-                            // Intento secundario si el archivo ya existe
-                            const fileExistsMatch = output.match(/\[download\] (.*) has already been downloaded/);
-                            if (fileExistsMatch) {
-                                fileName = path.basename(fileExistsMatch[1]);
-                            }
+                    let format;
+                    if (downloadType === 'audio') {
+                        // Prioriza formatos de solo audio, m4a es común y de buena calidad
+                        format = metadata.formats.find(f => f.acodec !== 'none' && f.vcodec === 'none' && f.ext === 'm4a');
+                        // Si no encuentra m4a, busca cualquier formato de solo audio
+                        if (!format) {
+                            format = metadata.formats.find(f => f.acodec !== 'none' && f.vcodec === 'none');
                         }
-                    }
-
-                    // Capturar progreso
-                    const progressMatch = output.match(/\[download\]\s+(\d+\.\d+)% of/);
-                    if (progressMatch) {
-                        const progress = progressMatch[1];
-                        ws.send(JSON.stringify({ type: 'progress', progress }));
-                    }
-                });
-
-                ytdlpProcess.stderr.on('data', (data) => {
-                    console.error(`stderr: ${data}`);
-                });
-
-                ytdlpProcess.on('close', (code) => {
-                    console.log(`Proceso terminado con código: ${code}`);
-                    if (cookieFilePath && fs.existsSync(cookieFilePath)) {
-                        fs.unlinkSync(cookieFilePath);
-                    }
-                    if (code === 0 && fileName) {
-                        const downloadUrl = `/downloads/${encodeURIComponent(fileName)}`;
-                        ws.send(JSON.stringify({ type: 'completed', downloadUrl }));
                     } else {
-                        ws.send(JSON.stringify({ type: 'error', message: 'La descarga falló o no se encontró el nombre del archivo.' }));
-                    }
-                });
-
-                // Matar proceso si el cliente se desconecta
-                ws.on('close', () => {
-                    if (ytdlpProcess && !ytdlpProcess.killed) {
-                        ytdlpProcess.kill();
-                        if (cookieFilePath && fs.existsSync(cookieFilePath)) {
-                           fs.unlinkSync(cookieFilePath);
+                        // Busca un formato de video con audio, preferiblemente mp4 y una resolución decente (e.g. 720p)
+                        format = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4' && f.height === 720);
+                        // Si no, cualquier mp4 con video y audio
+                        if (!format) {
+                            format = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4');
+                        }
+                        // Si no, cualquier formato con video y audio
+                        if (!format) {
+                             format = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none');
                         }
                     }
-                });
+
+                    if (format && format.url) {
+                         ws.send(JSON.stringify({
+                            type: 'info',
+                            downloadUrl: format.url,
+                            title: metadata.title,
+                            ext: format.ext
+                        }));
+                    } else {
+                        ws.send(JSON.stringify({ type: 'error', message: 'No se encontró un formato de descarga adecuado.' }));
+                    }
+
+                } catch (error) {
+                    console.error('Error con yt-dlp:', error);
+                    ws.send(JSON.stringify({ type: 'error', message: 'Error al obtener la información del video.' }));
+                }
             }
         } catch (e) {
             console.error('Error procesando mensaje:', e);
