@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Deshabilitar botón y mostrar estado
         submitButton.disabled = true;
-        statusMessage.textContent = 'Generando enlace de descarga...';
+        statusMessage.textContent = 'Descargando...';
         statusMessage.className = '';
         downloadLinkContainer.innerHTML = '';
 

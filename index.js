@@ -60,63 +60,63 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: 'error', message: 'Server error: yt-dlp binary not found' }));
                     return;
                 }
-
-                const ytdlp = new YTDlpWrap(ytdlpPath);
                 
-                const ytdlpArgs = [];
+                const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
+                const args = [url, '-o', outputTemplate];
+
                 if (proxy) {
-                    ytdlpArgs.push('--proxy', proxy);
+                    args.push('--proxy', proxy);
                 }
-                 if (cookies && cookies.trim() !== '') {
-                    // yt-dlp-wrap no maneja archivos de cookies directamente, así que lo omitimos por ahora
-                    // En un futuro se podría implementar escribiendo a un archivo temporal
+
+                if (downloadType === 'audio') {
+                    args.push(
+                        '-f', 'bestaudio/best',
+                        '--extract-audio',
+                        '--audio-format', 'mp3',
+                        '--audio-quality', '192'
+                    );
+                } else {
+                    args.push(
+                        '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                        '--merge-output-format', 'mp4'
+                    );
                 }
+                
+                const ytdlp = new YTDlpWrap(ytdlpPath);
 
                 try {
-                    const metadata = await ytdlp.getVideoInfo(url, ytdlpArgs);
-                    
-                    if (!metadata || !metadata.formats) {
-                        console.error('Error: metadata o metadata.formats no está definido.');
-                        console.error('Metadata recibida:', metadata);
-                        ws.send(JSON.stringify({ type: 'error', message: 'No se pudo obtener la información de formatos del video.' }));
+                    // Limpiar directorio de descargas antiguo para evitar servir archivos viejos
+                    fs.readdirSync(downloadsDir).forEach(f => fs.unlinkSync(path.join(downloadsDir, f)));
+
+                    console.log(`Ejecutando yt-dlp con: ${args.join(' ')}`);
+                    await ytdlp.execPromise(args);
+
+                    const files = fs.readdirSync(downloadsDir)
+                        .map(name => ({
+                            name,
+                            time: fs.statSync(path.join(downloadsDir, name)).mtime.getTime()
+                        }))
+                        .sort((a, b) => b.time - a.time);
+
+                    if (files.length === 0) {
+                        ws.send(JSON.stringify({ type: 'error', message: 'La descarga falló, no se generó ningún archivo.' }));
                         return;
                     }
 
-                    let format;
-                    if (downloadType === 'audio') {
-                        // Prioriza formatos de solo audio, m4a es común y de buena calidad
-                        format = metadata.formats.find(f => f.acodec !== 'none' && f.vcodec === 'none' && f.ext === 'm4a');
-                        // Si no encuentra m4a, busca cualquier formato de solo audio
-                        if (!format) {
-                            format = metadata.formats.find(f => f.acodec !== 'none' && f.vcodec === 'none');
-                        }
-                    } else {
-                        // Busca un formato de video con audio, preferiblemente mp4 y una resolución decente (e.g. 720p)
-                        format = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4' && f.height === 720);
-                        // Si no, cualquier mp4 con video y audio
-                        if (!format) {
-                            format = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4');
-                        }
-                        // Si no, cualquier formato con video y audio
-                        if (!format) {
-                             format = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none');
-                        }
-                    }
+                    const downloadedFile = files[0].name;
+                    const ext = path.extname(downloadedFile).replace('.', '');
+                    const title = path.basename(downloadedFile, '.' + ext);
 
-                    if (format && format.url) {
-                         ws.send(JSON.stringify({
-                            type: 'info',
-                            downloadUrl: format.url,
-                            title: metadata.title,
-                            ext: format.ext
-                        }));
-                    } else {
-                        ws.send(JSON.stringify({ type: 'error', message: 'No se encontró un formato de descarga adecuado.' }));
-                    }
+                    ws.send(JSON.stringify({
+                        type: 'info',
+                        downloadUrl: `/downloads/${encodeURIComponent(downloadedFile)}`,
+                        title,
+                        ext
+                    }));
 
                 } catch (error) {
                     console.error('Error detallado con yt-dlp:', error);
-                    ws.send(JSON.stringify({ type: 'error', message: 'Error al obtener la información del video. Revisa los logs del servidor para más detalles.' }));
+                    ws.send(JSON.stringify({ type: 'error', message: 'Error durante la descarga. Revisa los logs del servidor para más detalles.' }));
                 }
             }
         } catch (e) {
@@ -201,6 +201,15 @@ async function initialize() {
             console.log('Binario descargado y permisos asignados.');
         } else {
             console.log('Binario yt-dlp ya existe en:', binaryPath);
+        }
+
+        // Verificar si ffmpeg está instalado
+        try {
+            childProcess.execSync('ffmpeg -version');
+            console.log('ffmpeg está instalado y disponible en el PATH.');
+        } catch (error) {
+            console.warn('ADVERTENCIA: ffmpeg no parece estar instalado o no está en el PATH.');
+            console.warn('La extracción de audio y la fusión de formatos de video podrían fallar.');
         }
 
         server.listen(port, () => {
