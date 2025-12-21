@@ -32,7 +32,7 @@ wss.on('connection', (ws) => {
             // Convertir buffer a string explícitamente para evitar errores
             const messageString = messageBuffer.toString();
             const parsedMessage = JSON.parse(messageString);
-            const { type, url, cookies } = parsedMessage;
+            const { type, url, cookies, downloadType } = parsedMessage;
 
             if (type === 'download') {
                 if (!url) {
@@ -56,6 +56,11 @@ wss.on('connection', (ws) => {
                     '--newline', // Importante para parsear el output línea por línea
                     '-o', outputTemplate
                 ];
+                
+                if (downloadType === 'audio') {
+                    options.push('-x'); // Opción corta para --extract-audio
+                    options.push('--audio-format', 'mp3');
+                }
 
                 let cookieFilePath = null;
                 if (cookies && cookies.trim() !== '') {

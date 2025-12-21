@@ -79,7 +79,10 @@ document.addEventListener('DOMContentLoaded', () => {
         progressBar.style.width = '0%';
         progressBar.textContent = '0%';
 
-        ws.send(JSON.stringify({ type: 'download', url, cookies }));
+        const audioOnlyCheckbox = document.getElementById('audio-only-checkbox');
+        const downloadType = audioOnlyCheckbox.checked ? 'audio' : 'video';
+
+        ws.send(JSON.stringify({ type: 'download', url, cookies, downloadType }));
     });
 
     function showError(message) {
