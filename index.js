@@ -5,7 +5,6 @@ const childProcess = require('node:child_process');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
-const https = require('https');
 const os = require('os');
 const WebSocket = require('ws');
 const YTDlpWrap = require('yt-dlp-wrap').default;
@@ -18,19 +17,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // Configuración de middleware y estáticos
-app.use(
-    helmet({
-        contentSecurityPolicy: {
-            directives: {
-                defaultSrc: ["'self'"],
-                scriptSrc: ["'self'", "'unsafe-eval'"],
-                styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-                fontSrc: ["'self'", "https://fonts.gstatic.com"],
-                connectSrc: ["'self'", "wss:", "ws:"],
-            },
-        },
-    })
-);
+app.use(helmet()); // Eliminar Content Security Policy para no generar conflictos con el servidor de yt-dlp
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
@@ -53,13 +40,8 @@ wss.on('connection', (ws) => {
                     return;
                 }
 
-                const binaryName = os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
-                const ytdlpPath = path.join(os.tmpdir(), binaryName);
-
-                if (!fs.existsSync(ytdlpPath)) {
-                    ws.send(JSON.stringify({ type: 'error', message: 'Server error: yt-dlp binary not found' }));
-                    return;
-                }
+                // yt-dlp se espera que esté en el PATH o accesible globalmente
+                const ytdlp = new YTDlpWrap();
                 
                 const outputTemplate = path.join(downloadsDir, '%(title)s.%(ext)s');
                 const args = [url, '-o', outputTemplate];
@@ -82,7 +64,6 @@ wss.on('connection', (ws) => {
                     );
                 }
                 
-                const ytdlp = new YTDlpWrap(ytdlpPath);
 
                 try {
                     // Limpiar directorio de descargas antiguo para evitar servir archivos viejos
@@ -143,7 +124,7 @@ wss.on('close', () => clearInterval(interval));
 // Ruta de descarga
 app.get('/downloads/:fileName', (req, res) => {
     const fileName = req.params.fileName;
-    const safeFileName = path.basename(fileName);
+    const safeFileName = req.params.fileName; // Usar req.params.fileName directamente
     const filePath = path.join(downloadsDir, safeFileName);
   
     if (fs.existsSync(filePath)) {
@@ -159,66 +140,7 @@ app.get('/downloads/:fileName', (req, res) => {
     }
 });
 
-// Inicialización del servidor y descarga del binario
-async function initialize() {
-    try {
-        const binaryName = os.platform() === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
-        const binaryPath = path.join(os.tmpdir(), binaryName);
-        
-        if (!fs.existsSync(binaryPath)) {
-            console.log('Descargando binario yt-dlp a:', binaryPath);
-            
-            // URL directa a la última versión para evitar el rate limit de la API de GitHub
-            const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${binaryName}`;
-            
-            // Usamos https para descargar el archivo manualmente
-            await new Promise((resolve, reject) => {
-                https.get(downloadUrl, (res) => {
-                    if (res.statusCode === 302) { // GitHub redirige
-                        https.get(res.headers.location, (res2) => {
-                            const fileStream = fs.createWriteStream(binaryPath);
-                            res2.pipe(fileStream);
-                            fileStream.on('finish', () => {
-                                fileStream.close(resolve);
-                            });
-                        }).on('error', reject);
-                    } else if (res.statusCode === 200) {
-                        const fileStream = fs.createWriteStream(binaryPath);
-                        res.pipe(fileStream);
-                        fileStream.on('finish', () => {
-                            fileStream.close(resolve);
-                        });
-                    } else {
-                        reject(new Error(`Failed to download binary: Status Code ${res.statusCode}`));
-                    }
-                }).on('error', reject);
-            });
-
-            // Permisos de ejecución para Linux/Render
-            if(os.platform() !== 'win32') {
-                fs.chmodSync(binaryPath, '755');
-            }
-            console.log('Binario descargado y permisos asignados.');
-        } else {
-            console.log('Binario yt-dlp ya existe en:', binaryPath);
-        }
-
-        // Verificar si ffmpeg está instalado
-        try {
-            childProcess.execSync('ffmpeg -version');
-            console.log('ffmpeg está instalado y disponible en el PATH.');
-        } catch (error) {
-            console.warn('ADVERTENCIA: ffmpeg no parece estar instalado o no está en el PATH.');
-            console.warn('La extracción de audio y la fusión de formatos de video podrían fallar.');
-        }
-
-        server.listen(port, () => {
-            console.log(`Servidor escuchando en http://localhost:${port}`);
-        });
-    } catch (error) {
-        console.error('Error fatal iniciando el servidor:', error);
-        process.exit(1);
-    }
-}
-
-initialize();
+// Inicialización del servidor
+server.listen(port, () => {
+    console.log(`Servidor escuchando en http://localhost:${port}`);
+});
