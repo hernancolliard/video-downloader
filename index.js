@@ -66,6 +66,13 @@ wss.on('connection', (ws) => {
                 try {
                     const metadata = await ytdlp.getVideoInfo(url);
                     
+                    if (!metadata || !metadata.formats) {
+                        console.error('Error: metadata o metadata.formats no está definido.');
+                        console.error('Metadata recibida:', metadata);
+                        ws.send(JSON.stringify({ type: 'error', message: 'No se pudo obtener la información de formatos del video.' }));
+                        return;
+                    }
+
                     let format;
                     if (downloadType === 'audio') {
                         // Prioriza formatos de solo audio, m4a es común y de buena calidad
