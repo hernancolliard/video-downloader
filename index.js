@@ -56,6 +56,7 @@ wss.on('connection', (ws) => {
                     '--newline', // Importante para parsear el output línea por línea
                     '--extractor-args', 'youtubetab:skip=authcheck',
                     '--force-ipv4',
+                    '--sleep-requests', '2',
                     '-o', outputTemplate
                 ];
                 
@@ -191,9 +192,8 @@ async function initialize() {
         if (!fs.existsSync(binaryPath)) {
             console.log('Descargando binario yt-dlp a:', binaryPath);
             
-            // URL directa a una versión específica para evitar el rate limit de la API de GitHub
-            const version = '2023.12.30';
-            const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/download/${version}/${binaryName}`;
+            // URL directa a la última versión para evitar el rate limit de la API de GitHub
+            const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${binaryName}`;
             
             // Usamos https para descargar el archivo manualmente
             await new Promise((resolve, reject) => {
