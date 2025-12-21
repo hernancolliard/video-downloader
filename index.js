@@ -55,6 +55,7 @@ wss.on('connection', (ws) => {
                     '--progress',
                     '--newline', // Importante para parsear el output línea por línea
                     '--extractor-args', 'youtubetab:skip=authcheck',
+                    '--force-ipv4',
                     '-o', outputTemplate
                 ];
                 
@@ -120,7 +121,7 @@ wss.on('connection', (ws) => {
 
                 ytdlpProcess.on('close', (code) => {
                     console.log(`Proceso terminado con código: ${code}`);
-                    if (cookieFilePath) {
+                    if (cookieFilePath && fs.existsSync(cookieFilePath)) {
                         fs.unlinkSync(cookieFilePath);
                     }
                     if (code === 0 && fileName) {
@@ -135,7 +136,7 @@ wss.on('connection', (ws) => {
                 ws.on('close', () => {
                     if (ytdlpProcess && !ytdlpProcess.killed) {
                         ytdlpProcess.kill();
-                        if (cookieFilePath) {
+                        if (cookieFilePath && fs.existsSync(cookieFilePath)) {
                            fs.unlinkSync(cookieFilePath);
                         }
                     }
