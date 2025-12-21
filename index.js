@@ -45,7 +45,7 @@ wss.on('connection', (ws) => {
         try {
             const messageString = messageBuffer.toString();
             const parsedMessage = JSON.parse(messageString);
-            const { type, url, cookies, downloadType } = parsedMessage;
+            const { type, url, cookies, proxy, downloadType } = parsedMessage;
 
             if (type === 'download') {
                 if (!url) {
@@ -63,8 +63,17 @@ wss.on('connection', (ws) => {
 
                 const ytdlp = new YTDlpWrap(ytdlpPath);
                 
+                const ytdlpArgs = [];
+                if (proxy) {
+                    ytdlpArgs.push('--proxy', proxy);
+                }
+                 if (cookies && cookies.trim() !== '') {
+                    // yt-dlp-wrap no maneja archivos de cookies directamente, así que lo omitimos por ahora
+                    // En un futuro se podría implementar escribiendo a un archivo temporal
+                }
+
                 try {
-                    const metadata = await ytdlp.getVideoInfo(url);
+                    const metadata = await ytdlp.getVideoInfo(url, ytdlpArgs);
                     
                     if (!metadata || !metadata.formats) {
                         console.error('Error: metadata o metadata.formats no está definido.');

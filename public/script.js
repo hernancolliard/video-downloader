@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const url = urlInput.value.trim();
         const cookies = cookieInput.value.trim();
+        const proxy = document.getElementById('proxy-input').value.trim();
         if (!url) {
             showError('Por favor, introduce una URL.');
             return;
@@ -58,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const audioOnlyCheckbox = document.getElementById('audio-only-checkbox');
         const downloadType = audioOnlyCheckbox.checked ? 'audio' : 'video';
 
-        ws.send(JSON.stringify({ type: 'download', url, cookies, downloadType }));
+        ws.send(JSON.stringify({ type: 'download', url, cookies, proxy, downloadType }));
     });
 
     function showError(message) {
