@@ -54,6 +54,7 @@ wss.on('connection', (ws) => {
                 const options = [
                     '--progress',
                     '--newline', // Importante para parsear el output línea por línea
+                    '--extractor-args', 'youtubetab:skip=authcheck',
                     '-o', outputTemplate
                 ];
                 
