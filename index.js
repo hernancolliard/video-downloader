@@ -115,8 +115,8 @@ wss.on('connection', (ws) => {
                     }
 
                 } catch (error) {
-                    console.error('Error con yt-dlp:', error);
-                    ws.send(JSON.stringify({ type: 'error', message: 'Error al obtener la información del video.' }));
+                    console.error('Error detallado con yt-dlp:', error);
+                    ws.send(JSON.stringify({ type: 'error', message: 'Error al obtener la información del video. Revisa los logs del servidor para más detalles.' }));
                 }
             }
         } catch (e) {
