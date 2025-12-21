@@ -9,6 +9,7 @@ const https = require('https');
 const os = require('os');
 const WebSocket = require('ws');
 const YTDlpWrap = require('yt-dlp-wrap').default;
+const helmet = require('helmet');
 
 // Inicialización de la app
 const app = express();
@@ -17,6 +18,18 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // Configuración de middleware y estáticos
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-eval'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                connectSrc: ["'self'", "wss:", "ws:"],
+            },
+        },
+    })
+);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
