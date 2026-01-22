@@ -47,3 +47,6 @@ wss.on("connection", (ws) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Servidor listo en puerto ${PORT}`));
+/*git add server.js
+  git commit -m "Fix server.js: serve frontend + WebSocket"
+  git push origin main*/
