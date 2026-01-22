@@ -1,31 +1,30 @@
 # Imagen base oficial de Node
 FROM node:20-slim
 
-# Instalar dependencias necesarias para yt-dlp y ffmpeg
+# Instalar dependencias necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     ca-certificates \
     curl \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Descargar e instalar yt-dlp
-# Usamos la última versión estable directamente de GitHub
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+# Instalar yt-dlp
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-# Creamos directorio de trabajo
+# Directorio de trabajo
 WORKDIR /app
 
-# Copiamos archivos y dependencias
+# Instalar dependencias Node
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Copiamos el resto de los archivos de la aplicación
+# Copiar el resto del proyecto
 COPY . .
 
-# Exponemos el puerto
+# Render usa PORT automáticamente
 EXPOSE 3000
 
-# Comando de inicio
-CMD ["node", "index.js"]
+# ARRANQUE CORRECTO
+CMD ["node", "server.js"]
