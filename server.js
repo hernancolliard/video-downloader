@@ -1,50 +1,53 @@
-import express from "express";
-import { exec } from "child_process";
-import fs from "fs";
-import path from "path";
-import { randomUUID } from "crypto";
+const express = require("express");
+const path = require("path");
+const http = require("http");
+const WebSocket = require("ws");
 
+// Crear la app de Express
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "5mb" }));
-app.use(express.static("public"));
-app.use("/files", express.static("downloads"));
+// Servir archivos estáticos de la carpeta "public"
+app.use(express.static(path.join(__dirname, "public")));
 
-app.post("/download", (req, res) => {
-  const { url, cookies, proxy, downloadType } = req.body;
-  if (!url) return res.json({ error: "URL requerida" });
+// Servir index.html en la raíz
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
-  const id = randomUUID();
-  const downloadsDir = "downloads";
-  if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir);
+// Crear el servidor HTTP
+const server = http.createServer(app);
 
-  let cookieFile = null;
-  if (cookies) {
-    cookieFile = `cookies_${id}.txt`;
-    fs.writeFileSync(cookieFile, cookies);
-  }
+// Configurar WebSocket
+const wss = new WebSocket.Server({ server });
 
-  const format = downloadType === "audio" ? "-x --audio-format mp3" : "-f best";
+wss.on("connection", (ws) => {
+  console.log("Cliente conectado via WebSocket");
 
-  const cookieArg = cookieFile ? `--cookies ${cookieFile}` : "";
-  const proxyArg = proxy ? `--proxy "${proxy}"` : "";
-  const output = `${downloadsDir}/${id}.%(ext)s`;
+  ws.on("message", async (message) => {
+    const data = JSON.parse(message);
+    if (data.type === "download") {
+      // Aquí va tu lógica de descarga con yt-dlp
+      // Ejemplo de respuesta de prueba
+      ws.send(
+        JSON.stringify({
+          type: "info",
+          title: "video_prueba",
+          ext: "mp4",
+          downloadUrl: "https://example.com/video.mp4",
+        }),
+      );
+    }
+  });
 
-  const cmd = `yt-dlp ${format} ${cookieArg} ${proxyArg} -o "${output}" "${url}"`;
-
-  exec(cmd, (err) => {
-    if (cookieFile && fs.existsSync(cookieFile)) fs.unlinkSync(cookieFile);
-
-    if (err) return res.json({ error: "Error al descargar" });
-
-    const file = fs.readdirSync(downloadsDir).find((f) => f.startsWith(id));
-    res.json({
-      downloadUrl: `/files/${file}`,
-      title: file,
-      ext: file.split(".").pop(),
-    });
+  ws.on("close", () => {
+    console.log("Cliente desconectado");
   });
 });
 
-app.listen(PORT, () => console.log("Servidor listo"));
+// Puerto
+const PORT = process.env.PORT || 3000;
+
+// Arrancar servidor
+server.listen(PORT, () => {
+  console.log(`Servidor listo en puerto ${PORT}`);
+});
