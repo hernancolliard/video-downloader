@@ -4,6 +4,7 @@ FROM node:20-slim
 # Instalar dependencias necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    python3 \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
