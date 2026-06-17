@@ -3,35 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Video Downloader</title>
+    <title>YouTube Downloader</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="container">
-      <h1>Video Downloader</h1>
-      <p>
-        Pega la URL de la página que contiene el video que quieres descargar.
-      </p>
+    <main class="container">
+      <h1>YouTube Downloader</h1>
+      <p>Pega una URL de YouTube para preparar el enlace del video completo.</p>
       <form id="download-form">
         <input
-          type="text"
+          type="url"
           id="url-input"
-          placeholder="https://ejemplo.com/video..."
+          placeholder="https://www.youtube.com/watch?v=..."
           required
         />
-        <label for="cookie-input">Cookies (Opcional, formato Netscape):</label>
-        <textarea id="cookie-input" placeholder="Pega aquí el contenido de tu archivo de cookies..."></textarea>
-        <label for="proxy-input">Proxy (Opcional):</label>
-        <input type="text" id="proxy-input" placeholder="http://usuario:contraseña@host:puerto">
-        <div class="options">
-          <input type="checkbox" id="audio-only-checkbox" name="audio-only">
-          <label for="audio-only-checkbox">Descargar solo audio (MP3)</label>
-        </div>
         <button type="submit" id="submit-button">Descargar</button>
       </form>
       <div id="status-message"></div>
+      <div id="preview"></div>
       <div id="download-link-container"></div>
-    </div>
+    </main>
     <script src="script.js"></script>
   </body>
 </html>
