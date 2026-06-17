@@ -17,6 +17,7 @@ if (-not (Test-Path $YtDlpBinary)) {
 
 $env:DOWNLOAD_ENGINE = "yt-dlp"
 $env:YT_DLP_BINARY = $YtDlpBinary
+$env:YT_DLP_NO_CHECK_CERTIFICATES = "1"
 $env:YOUTUBE_COOKIES_BASE64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content $CookieFile -Raw)))
 $env:PORT = "3000"
 
