@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: video-downloader
+    env: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: DOWNLOAD_ENGINE
+        value: yt-dlp
+      - key: YTDL_NO_UPDATE
+        value: "1"
+      - key: YOUTUBE_COOKIES_BASE64
+        sync: false

@@ -7,6 +7,7 @@ export default function handler(req, res) {
     return res.status(200).json({
       ok: true,
       node: process.version,
+      engine: process.env.DOWNLOAD_ENGINE || "ytdl-core",
       cookies: getCookieEnvironmentStatus(),
     });
   } catch (error) {
