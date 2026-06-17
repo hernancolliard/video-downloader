@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getFullVideoDownload } from "./lib/youtube.js";
+import { getFullVideoDownload, getPublicError } from "./lib/youtube.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,10 +23,7 @@ app.post(["/download", "/api/download"], async (req, res) => {
   } catch (error) {
     console.error("download error:", error);
     res.status(error.statusCode || 500).json({
-      error:
-        error.statusCode && error.statusCode < 500
-          ? error.message
-          : "No se pudo preparar la descarga. Prueba con otro video o intenta de nuevo.",
+      error: getPublicError(error),
     });
   }
 });

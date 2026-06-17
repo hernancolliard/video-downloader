@@ -1,4 +1,4 @@
-import { getFullVideoDownload } from "../lib/youtube.js";
+import { getFullVideoDownload, getPublicError } from "../lib/youtube.js";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -14,10 +14,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("download error:", error);
     return res.status(error.statusCode || 500).json({
-      error:
-        error.statusCode && error.statusCode < 500
-          ? error.message
-          : "No se pudo preparar la descarga. Prueba con otro video o intenta de nuevo.",
+      error: getPublicError(error),
     });
   }
 }
