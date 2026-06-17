@@ -1,4 +1,5 @@
 node_modules/
 downloads/
 cookies_*.txt
-
+cookies.txt
+cookies*.txt
